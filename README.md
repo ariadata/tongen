@@ -31,10 +31,10 @@ You should now have an executable named tongen in your project directory.
 ### Download Pre-built Binaries [Click Here](https://github.com/ariadata/tongen/releases)
 ```bash
     # Linux 
-    curl -sSfL https://raw.githubusercontent.com/ariadata/tongen/main/build/tongen -o tongen && chmod +x tongen
+    curl -sSfL https://github.com/ariadata/tongen/releases/latest/download/tongen-linux -o tongen && chmod +x tongen
 
     # Windows
-    curl -sSfL https://raw.githubusercontent.com/ariadata/tongen/main/build/tongen.exe -o tongen.exe
+    curl -sSfL https://github.com/ariadata/tongen/releases/latest/download/tongen-linux.exe -o tongen.exe
 ```
 ### Usage
 
