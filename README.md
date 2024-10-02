@@ -1,6 +1,9 @@
 # TON Wallet Address Finder
 
 generate custom TON wallet addresses (V5) that end with a specific suffix.
+### ⭐ Support the Project
+
+If you find this project helpful or interesting, please consider giving it a star! Your support is much appreciated.
 
 ## Features
 - **Multi-threaded**: Utilizes multiple CPU cores to generate wallets in parallel.
