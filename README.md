@@ -34,7 +34,7 @@ You should now have an executable named tongen in your project directory.
     curl -sSfL https://github.com/ariadata/tongen/releases/latest/download/tongen-linux -o tongen && chmod +x tongen
 
     # Windows
-    curl -sSfL https://github.com/ariadata/tongen/releases/latest/download/tongen-linux.exe -o tongen.exe
+    curl -sSfL https://github.com/ariadata/tongen/releases/latest/download/tongen-windows.exe -o tongen.exe
 ```
 ### Usage
 
