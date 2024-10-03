@@ -1,7 +1,7 @@
 # TON Wallet Address Finder
 
 generate custom TON wallet addresses (V5) that end with a specific suffix.
-### ⭐ Support the Project
+### ⭐ Support the Project by giving a satr!
 
 If you find this project helpful or interesting, please consider giving it a star! Your support is much appreciated.
 
