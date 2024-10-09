@@ -16,6 +16,7 @@ import (
 
 // Input parameters
 type Config struct {
+	Version       int
 	Suffix        string
 	CaseSensitive bool
 	Bounce        bool
@@ -61,6 +62,7 @@ func main() {
 
 // parseFlags handles command-line input parameters
 func parseFlags() Config {
+	version := flag.Int("version", 5, "Wallet version (4 or 5, default: 5)")
 	suffix := flag.String("suffix", "", "Desired contract address suffix (required)")
 	caseSensitive := flag.Bool("case-sensitive", false, "Enable case-sensitive suffix matching (default: false)")
 	bounce := flag.Bool("bounce", false, "Enable bounceable address (default: false)")
@@ -68,12 +70,13 @@ func parseFlags() Config {
 	testnet := flag.Bool("testnet", false, "Use testnet (default: false)")
 	flag.Parse()
 
-	if *suffix == "" {
+	if *suffix == "" || (*version != 4 && *version != 5) {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
 	return Config{
+		Version:       *version,
 		Suffix:        *suffix,
 		CaseSensitive: *caseSensitive,
 		Bounce:        *bounce,
@@ -92,20 +95,20 @@ func processWallets(config Config, counter *uint64, stopChan chan struct{}, once
 			// Generate the seed phrase
 			seed := wallet.NewSeed()
 
-			// Create a V5R1Final wallet using the seed
-			w, err := wallet.FromSeed(nil, seed, wallet.ConfigV5R1Final{
-				NetworkGlobalID: getNetworkID(config.Testnet),
-				Workchain:       0, // Base workchain
-			})
+			// Create a wallet based on the selected version (V4 or V5)
+			var addressStr string
+			var err error
+
+			if config.Version == 5 {
+				addressStr, err = generateV5Wallet(seed, config)
+			} else {
+				addressStr, err = generateV4Wallet(seed, config)
+			}
+
 			if err != nil {
 				log.Printf("Failed to create wallet: %v", err)
 				continue
 			}
-
-			// Get the wallet address
-			addr := w.WalletAddress()
-			// Get the address string (mainnet or testnet) and check bounceable flag
-			addressStr := addr.Testnet(config.Testnet).Bounce(config.Bounce).String()
 
 			// Case-sensitive or case-insensitive suffix comparison
 			if config.CaseSensitive {
@@ -128,6 +131,37 @@ func processWallets(config Config, counter *uint64, stopChan chan struct{}, once
 	}
 }
 
+// generateV5Wallet creates a V5 wallet and returns the corresponding address
+func generateV5Wallet(seed []string, config Config) (string, error) {
+	// Create a V5R1Final wallet using the seed
+	w, err := wallet.FromSeed(nil, seed, wallet.ConfigV5R1Final{
+		NetworkGlobalID: getNetworkID(config.Testnet),
+		Workchain:       0, // Base workchain
+	})
+	if err != nil {
+		return "", err
+	}
+
+	// Get the wallet address
+	addr := w.WalletAddress()
+	addressStr := addr.Testnet(config.Testnet).Bounce(config.Bounce).String()
+	return addressStr, nil
+}
+
+// generateV4Wallet creates a V4 wallet and returns the corresponding address
+func generateV4Wallet(seed []string, config Config) (string, error) {
+	// Create a V4R2 wallet using the seed
+	w, err := wallet.FromSeed(nil, seed, wallet.V4R2)
+	if err != nil {
+		return "", err
+	}
+
+	// Get the wallet address
+	addr := w.WalletAddress()
+	addressStr := addr.Testnet(config.Testnet).Bounce(config.Bounce).String()
+	return addressStr, nil
+}
+
 // logProgress logs how many wallets were processed in the last second
 func logProgress(counter *uint64, stopChan chan struct{}) {
 	var lastCount uint64
@@ -144,7 +178,7 @@ func logProgress(counter *uint64, stopChan chan struct{}) {
 	}
 }
 
-// getNetworkID returns the correct network ID for mainnet or testnet
+// getNetworkID returns the correct network ID for mainnet or testnet (only for V5)
 func getNetworkID(isTestnet bool) int32 {
 	if isTestnet {
 		return -3 // Testnet Global ID

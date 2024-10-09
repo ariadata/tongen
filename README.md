@@ -1,6 +1,6 @@
 # TON Wallet Address Finder
 
-generate custom TON wallet addresses (V5) that end with a specific suffix.
+generate custom TON wallet addresses (V4R2 and V5R2) that end with a specific suffix.
 ### ⭐ Support the Project by giving a satr!
 
 If you find this project helpful or interesting, please consider giving it a star! Your support is much appreciated.
@@ -51,13 +51,15 @@ You should now have an executable named tongen in your project directory.
 
 > `-testnet` (optional): Use the testnet instead of the mainnet. Defaults to false.
 
+> `-version` (optional): Wallet version 4 or 5 (V4R2 or V5R2). Defaults to 5 (V5R2).
+
 ## Examples:
 ```bash
-# Generate a wallet non-bouncable address that ends with "_Neo" (case-sensitive) using all CPU cores on the mainnet
-./tongen -suffix="_Neo" -case-sensitive=true -bounce=false -threads=0 -testnet=false
+# Generate a wallet-v4 non-bouncable address that ends with "_Neo" (case-sensitive) using all CPU cores on the mainnet
+./tongen -suffix="_Xx" -case-sensitive=true -bounce=false -threads=0 -testnet=false -version=4
 
-# Generate a wallet bouncable address that ends with "_Test" (not case-insensitive) using 4 threads on testnet 
-./tongen -suffix="_Test" -case-sensitive=false -bounce=true -threads=4 -testnet=false
+# Generate a wallet-v5 bouncable address that ends with "_Test" (not case-insensitive) using 4 threads on testnet 
+./tongen -suffix="_Test" -case-sensitive=false -bounce=true -threads=4 -testnet=false -version=5
 
 ```
 
