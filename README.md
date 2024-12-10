@@ -12,6 +12,24 @@ If you find this project helpful or interesting, please consider giving it a sta
 - **Bounceable/non-bounceable**: Option to generate bounceable or non-bounceable addresses.
 - **Real-time logging**: Logs the number of addresses processed every second.
 
+## Quick Start
+### Linux
+```bash
+# Download and make executable
+curl -sSfL https://github.com/ariadata/tongen/releases/latest/download/tongen-linux -o tongen && chmod +x tongen
+
+# Generate V5R2 address ending with "_Cool" (case-sensitive)
+./tongen -suffix="_Cool" -case-sensitive=true -version=5
+```
+### Windows
+```bash
+# Download
+curl -sSfL https://github.com/ariadata/tongen/releases/latest/download/tongen-windows.exe -o tongen.exe
+
+# Generate V5R2 address ending with "_Cool" (case-sensitive)
+.\tongen.exe -suffix="_Cool" -case-sensitive=true -version=5
+```
+
 ## Installation
 
 1. Ensure you have [Go installed](https://go.dev/doc/install).
