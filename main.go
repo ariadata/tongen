@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/sevlyar/go-daemon"
 	"github.com/xssnick/tonutils-go/ton/wallet"
 )
 
@@ -22,12 +23,72 @@ type Config struct {
 	Bounce        bool
 	Threads       int
 	Testnet       bool
+	Output        string
+	Daemon        bool
 }
 
 func main() {
-	// Parse input parameters
-	config := parseFlags()
+	// Check for stop command first
+	if len(os.Args) > 1 && (os.Args[1] == "stop" || os.Args[1] == "--stop") {
+		stopDaemon()
+		return
+	}
 
+	// Check for daemon flag before parsing all flags
+	isDaemon := false
+	for _, arg := range os.Args {
+		if arg == "-d" || arg == "--daemon" {
+			isDaemon = true
+			break
+		}
+	}
+
+	if isDaemon {
+		// Initialize daemon context
+		daemonContext := &daemon.Context{
+			PidFileName: "/tmp/tongen.pid",
+			PidFilePerm: 0644,
+			LogFileName: "/tmp/tongen.log",
+			LogFilePerm: 0640,
+			WorkDir:     "./",
+			Umask:       027,
+			Args:        os.Args,
+		}
+
+		// Check if daemon is already running
+		child, err := daemonContext.Reborn()
+		if err != nil {
+			log.Fatalf("Daemon error: %v", err)
+		}
+
+		if child != nil {
+			// Parent process - exit
+			log.Println("Daemon started successfully")
+			log.Printf("PID file: %s", daemonContext.PidFileName)
+			log.Printf("Log file: %s", daemonContext.LogFileName)
+			return
+		}
+
+		// Child process - parse flags and run
+		defer func() {
+			if err := daemonContext.Release(); err != nil {
+				log.Printf("Unable to release pid-file: %s", err.Error())
+			}
+		}()
+
+		log.Println("Daemon started, running wallet generator...")
+		config := parseFlags()
+		runWalletGenerator(config)
+		return
+	}
+
+	// Normal mode - parse flags and run
+	config := parseFlags()
+	runWalletGenerator(config)
+}
+
+// runWalletGenerator contains the main wallet generation logic
+func runWalletGenerator(config Config) {
 	// Determine the number of threads (default: use all CPU cores if threads=0)
 	if config.Threads == 0 {
 		config.Threads = runtime.NumCPU()
@@ -62,16 +123,32 @@ func main() {
 
 // parseFlags handles command-line input parameters
 func parseFlags() Config {
-	version := flag.Int("version", 5, "Wallet version (4 or 5, default: 5)")
-	suffix := flag.String("suffix", "", "Desired contract address suffix (required)")
-	caseSensitive := flag.Bool("case-sensitive", false, "Enable case-sensitive suffix matching (default: false)")
-	bounce := flag.Bool("bounce", false, "Enable bounceable address (default: false)")
-	threads := flag.Int("threads", 0, "Number of parallel threads (default: 0, meaning use all CPU cores)")
-	testnet := flag.Bool("testnet", false, "Use testnet (default: false)")
-	flag.Parse()
+	// Create a new flag set to avoid conflicts
+	fs := flag.NewFlagSet("tongen", flag.ExitOnError)
+
+	version := fs.Int("version", 5, "Wallet version (4 or 5, default: 5)")
+	suffix := fs.String("suffix", "", "Desired contract address suffix (required)")
+	caseSensitive := fs.Bool("case-sensitive", false, "Enable case-sensitive suffix matching (default: false)")
+	bounce := fs.Bool("bounce", false, "Enable bounceable address (default: false)")
+	threads := fs.Int("threads", 0, "Number of parallel threads (default: 0, meaning use all CPU cores)")
+	testnet := fs.Bool("testnet", false, "Use testnet (default: false)")
+	output := fs.String("output", "", "Output file path to save results (use -o or --output)")
+	fs.StringVar(output, "o", "", "Output file path to save results (short form)")
+
+	// Filter out daemon flags from arguments
+	var filteredArgs []string
+	for _, arg := range os.Args {
+		if arg == "-d" || arg == "--daemon" {
+			continue
+		}
+		filteredArgs = append(filteredArgs, arg)
+	}
+
+	// Parse the filtered arguments
+	fs.Parse(filteredArgs[1:]) // Skip the program name
 
 	if *suffix == "" || (*version != 4 && *version != 5) {
-		flag.PrintDefaults()
+		fs.PrintDefaults()
 		os.Exit(1)
 	}
 
@@ -82,6 +159,8 @@ func parseFlags() Config {
 		Bounce:        *bounce,
 		Threads:       *threads,
 		Testnet:       *testnet,
+		Output:        *output,
+		Daemon:        false, // Daemon flag is handled in main function
 	}
 }
 
@@ -113,13 +192,13 @@ func processWallets(config Config, counter *uint64, stopChan chan struct{}, once
 			// Case-sensitive or case-insensitive suffix comparison
 			if config.CaseSensitive {
 				if strings.HasSuffix(addressStr, config.Suffix) {
-					printFoundWallet(seed, addressStr)
+					printFoundWallet(seed, addressStr, config.Output)
 					once.Do(func() { close(stopChan) })
 					return
 				}
 			} else {
 				if strings.HasSuffix(strings.ToLower(addressStr), strings.ToLower(config.Suffix)) {
-					printFoundWallet(seed, addressStr)
+					printFoundWallet(seed, addressStr, config.Output)
 					once.Do(func() { close(stopChan) })
 					return
 				}
@@ -187,8 +266,55 @@ func getNetworkID(isTestnet bool) int32 {
 }
 
 // printFoundWallet prints the found seed and wallet address
-func printFoundWallet(seed []string, address string) {
+func printFoundWallet(seed []string, address string, output string) {
 	fmt.Println("=== FOUND ===")
 	fmt.Println("Seed phrase:", strings.Join(seed, " "))
 	fmt.Println("Wallet address:", address)
+
+	if output != "" {
+		timestamp := time.Now().Format("2006-01-02 15:04:05")
+		content := fmt.Sprintf("=== FOUND %s ===\nSeed: %s\nAddress: %s\n\n", timestamp, strings.Join(seed, " "), address)
+		err := writeToFile(output, content)
+		if err != nil {
+			log.Printf("Failed to write to file: %v", err)
+		} else {
+			fmt.Printf("Results saved to: %s\n", output)
+		}
+	}
+}
+
+func writeToFile(filename, content string) error {
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(content)
+	return err
+}
+
+// stopDaemon stops the running daemon
+func stopDaemon() {
+	daemonContext := &daemon.Context{
+		PidFileName: "/tmp/tongen.pid",
+	}
+
+	// Send signal to stop the daemon
+	d, err := daemonContext.Search()
+	if err != nil {
+		log.Fatalf("Unable to search daemon: %s", err.Error())
+	}
+
+	if d == nil {
+		log.Println("Daemon is not running")
+		return
+	}
+
+	err = daemonContext.Release()
+	if err != nil {
+		log.Fatalf("Unable to release daemon: %s", err.Error())
+	}
+
+	log.Println("Daemon stopped successfully")
 }

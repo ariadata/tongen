@@ -11,6 +11,8 @@ If you find this project helpful or interesting, please consider giving it a sta
 - **Supports Mainnet/Testnet**: Select the network where the wallets are generated.
 - **Bounceable/non-bounceable**: Option to generate bounceable or non-bounceable addresses.
 - **Real-time logging**: Logs the number of addresses processed every second.
+- **Daemon mode**: Run as a background daemon process.
+- **Output file**: Save found wallets to a file for later use.
 
 ## Quick Start
 ### Linux
@@ -71,6 +73,12 @@ You should now have an executable named tongen in your project directory.
 
 > `-version` (optional): Wallet version 4 or 5 (V4R2 or V5R2). Defaults to 5 (V5R2).
 
+> `-o, --output` (optional): Output file path to save found wallets. Creates or appends to the file.
+
+> `-d, --daemon` (optional): Run as a background daemon process.
+
+> `stop` or `--stop`: Stop the running daemon process.
+
 ## Examples:
 ```bash
 # Generate a wallet-v4 non-bouncable address that ends with "_Neo" (case-sensitive) using all CPU cores on the mainnet
@@ -79,6 +87,17 @@ You should now have an executable named tongen in your project directory.
 # Generate a wallet-v5 bouncable address that ends with "_Test" (not case-insensitive) using 4 threads on testnet 
 ./tongen -suffix="_Test" -case-sensitive=false -bounce=true -threads=4 -testnet=false -version=5
 
+# Save found wallet to a file
+./tongen -suffix="_Cool" -o results.txt
+
+# Run as daemon in background
+./tongen -suffix="_Cool" -d
+
+# Stop the running daemon
+./tongen stop
+
+# Run as daemon and save results to file
+./tongen -suffix="_Cool" -d -o results.txt
 ```
 
 ### Example Output:
