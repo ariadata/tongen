@@ -10,6 +10,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"strconv"
+	"syscall"
+	"io/ioutil"
 
 	"github.com/sevlyar/go-daemon"
 	"github.com/xssnick/tonutils-go/ton/wallet"
@@ -294,27 +297,28 @@ func writeToFile(filename, content string) error {
 	return err
 }
 
-// stopDaemon stops the running daemon
+// stopDaemon reads the PID file and sends SIGTERM to the daemon process
 func stopDaemon() {
-	daemonContext := &daemon.Context{
-		PidFileName: "/tmp/tongen.pid",
-	}
-
-	// Send signal to stop the daemon
-	d, err := daemonContext.Search()
+	pidData, err := ioutil.ReadFile("/tmp/tongen.pid")
 	if err != nil {
-		log.Fatalf("Unable to search daemon: %s", err.Error())
+		log.Fatalf("Unable to read PID file: %s", err.Error())
 	}
 
-	if d == nil {
-		log.Println("Daemon is not running")
-		return
-	}
-
-	err = daemonContext.Release()
+	pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
 	if err != nil {
-		log.Fatalf("Unable to release daemon: %s", err.Error())
+		log.Fatalf("Invalid PID: %s", err.Error())
 	}
 
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		log.Fatalf("Unable to find process: %s", err.Error())
+	}
+
+	err = process.Signal(syscall.SIGTERM)
+	if err != nil {
+		log.Fatalf("Failed to stop process: %s", err.Error())
+	}
+
+	os.Remove("/tmp/tongen.pid")
 	log.Println("Daemon stopped successfully")
 }
