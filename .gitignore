@@ -1,0 +1,27 @@
+# IDE / editor
+/.vscode/
+/.idea/
+/.cursor/
+
+# Local / private workspaces (do not commit)
+/dev/
+
+# Build output
+/build/
+/tongen
+/tongen.exe
+*.exe
+
+# Go
+*.test
+*.out
+*.prof
+coverage.out
+coverage.html
+
+# Runtime / generated
+*.log
+*.pid
+results.txt
+tongen-out.txt
+*-out.txt

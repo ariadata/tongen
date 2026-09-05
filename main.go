@@ -3,16 +3,20 @@ package main
 import (
 	"flag"
 	"fmt"
+	"html"
+	"io"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
-	"strconv"
 	"syscall"
-	"io/ioutil"
+	"time"
 
 	"github.com/sevlyar/go-daemon"
 	"github.com/xssnick/tonutils-go/ton/wallet"
@@ -20,14 +24,16 @@ import (
 
 // Input parameters
 type Config struct {
-	Version       int
-	Suffix        string
-	CaseSensitive bool
-	Bounce        bool
-	Threads       int
-	Testnet       bool
-	Output        string
-	Daemon        bool
+	Version        int
+	Suffix         string
+	CaseSensitive  bool
+	Bounce         bool
+	Threads        int
+	Testnet        bool
+	Output         string
+	Daemon         bool
+	TelegramToken  string
+	TelegramChatID string
 }
 
 func main() {
@@ -137,6 +143,8 @@ func parseFlags() Config {
 	testnet := fs.Bool("testnet", false, "Use testnet (default: false)")
 	output := fs.String("output", "", "Output file path to save results (use -o or --output)")
 	fs.StringVar(output, "o", "", "Output file path to save results (short form)")
+	tgToken := fs.String("tg-token", "", "Telegram bot token (optional; requires -tg-chat-id)")
+	tgChatID := fs.String("tg-chat-id", "", "Telegram chat ID (optional; requires -tg-token)")
 
 	// Filter out daemon flags from arguments
 	var filteredArgs []string
@@ -155,15 +163,23 @@ func parseFlags() Config {
 		os.Exit(1)
 	}
 
+	token := strings.TrimSpace(*tgToken)
+	chatID := strings.TrimSpace(*tgChatID)
+	if (token == "") != (chatID == "") {
+		log.Fatal("Telegram notification requires both -tg-token and -tg-chat-id")
+	}
+
 	return Config{
-		Version:       *version,
-		Suffix:        *suffix,
-		CaseSensitive: *caseSensitive,
-		Bounce:        *bounce,
-		Threads:       *threads,
-		Testnet:       *testnet,
-		Output:        *output,
-		Daemon:        false, // Daemon flag is handled in main function
+		Version:        *version,
+		Suffix:         *suffix,
+		CaseSensitive:  *caseSensitive,
+		Bounce:         *bounce,
+		Threads:        *threads,
+		Testnet:        *testnet,
+		Output:         *output,
+		Daemon:         false, // Daemon flag is handled in main function
+		TelegramToken:  token,
+		TelegramChatID: chatID,
 	}
 }
 
@@ -195,13 +211,13 @@ func processWallets(config Config, counter *uint64, stopChan chan struct{}, once
 			// Case-sensitive or case-insensitive suffix comparison
 			if config.CaseSensitive {
 				if strings.HasSuffix(addressStr, config.Suffix) {
-					printFoundWallet(seed, addressStr, config.Output)
+					handleFoundWallet(config, seed, addressStr)
 					once.Do(func() { close(stopChan) })
 					return
 				}
 			} else {
 				if strings.HasSuffix(strings.ToLower(addressStr), strings.ToLower(config.Suffix)) {
-					printFoundWallet(seed, addressStr, config.Output)
+					handleFoundWallet(config, seed, addressStr)
 					once.Do(func() { close(stopChan) })
 					return
 				}
@@ -268,6 +284,12 @@ func getNetworkID(isTestnet bool) int32 {
 	return -239 // Mainnet Global ID
 }
 
+// handleFoundWallet prints, saves to file, then optionally notifies Telegram.
+func handleFoundWallet(config Config, seed []string, address string) {
+	printFoundWallet(seed, address, config.Output)
+	notifyTelegram(config, seed, address)
+}
+
 // printFoundWallet prints the found seed and wallet address
 func printFoundWallet(seed []string, address string, output string) {
 	fmt.Println("=== FOUND ===")
@@ -284,6 +306,41 @@ func printFoundWallet(seed []string, address string, output string) {
 			fmt.Printf("Results saved to: %s\n", output)
 		}
 	}
+}
+
+// notifyTelegram sends the found result to Telegram. Failures are logged only.
+func notifyTelegram(config Config, seed []string, address string) {
+	if config.TelegramToken == "" || config.TelegramChatID == "" {
+		return
+	}
+
+	text := fmt.Sprintf(
+		"=== FOUND ===\nSeed phrase:\n<code>%s</code>\nWallet address:\n<code>%s</code>",
+		html.EscapeString(strings.Join(seed, " ")),
+		html.EscapeString(address),
+	)
+
+	apiURL := "https://api.telegram.org/bot" + config.TelegramToken + "/sendMessage"
+	form := url.Values{}
+	form.Set("chat_id", config.TelegramChatID)
+	form.Set("text", text)
+	form.Set("parse_mode", "HTML")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.PostForm(apiURL, form)
+	if err != nil {
+		log.Printf("Failed to send Telegram notification: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Failed to send Telegram notification: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return
+	}
+
+	log.Println("Telegram notification sent")
 }
 
 func writeToFile(filename, content string) error {
