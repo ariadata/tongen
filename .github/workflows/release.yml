@@ -1,0 +1,90 @@
+# Build and publish GitHub Release assets.
+#
+# Trigger:
+#   - git tag vX.Y.Z && git push origin vX.Y.Z
+#   - or Actions → Release → Run workflow (enter tag, e.g. v1.6.0)
+# Re-running the same tag overwrites existing assets.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to release (e.g. v1.6.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version tag
+        id: version
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.version }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          case "$TAG" in
+            v*) ;;
+            *)
+              echo "Tag must start with 'v' (got: $TAG)" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing: $TAG"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build binaries
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          build() {
+            local goos="$1" goarch="$2" out="$3"
+            echo "Building $out ..."
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+              go build -trimpath -ldflags="-s -w" -o "dist/$out" .
+          }
+
+          build linux   amd64 tongen-linux-amd64
+          build linux   arm64 tongen-linux-arm64
+          build windows amd64 tongen-windows-amd64.exe
+          build windows arm64 tongen-windows-arm64.exe
+
+          file dist/*
+          ls -lh dist/
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body: ${{ steps.version.outputs.tag }}
+          files: |
+            dist/tongen-linux-amd64
+            dist/tongen-linux-arm64
+            dist/tongen-windows-amd64.exe
+            dist/tongen-windows-arm64.exe
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          make_latest: true
